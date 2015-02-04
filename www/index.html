@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Insert title here</title>
+<link href="./bootstrap/css/bootstrap.min.css" type="text/css"
+	rel="stylesheet">
+<link rel="stylesheet" href="./bootstrap/css/jqx.base.css"
+	type="text/css" />
+<link href="./bootstrap/css/bootstrap-switch.min.css" type="text/css"
+	rel="stylesheet">
+		
+<style type="text/css">
+.gauge{ background-color: #333; width:150px; height:150px;}
+.switch{background-color: #833;}
+</style>
+<script type="text/javascript" src="jquery-2.1.0.min.js"></script>
+<script type="text/javascript" src="bootstrap/js/bootstrap.min.js"></script>
+
+<script type="text/javascript" src="bootstrap/js/jqxcore.js"></script>
+<script type="text/javascript" src="bootstrap/js/jqxchart.js"></script>
+<script type="text/javascript" src="bootstrap/js/jqxgauge.js"></script>	
+<script type="text/javascript" src="bootstrap/js/bootstrap-switch.js"></script>
+<script type="text/javascript" src="/socket.io/socket.io.js"></script>
+<script type="text/javascript">
+var siren = new Audio('/siren.mp3');
+siren.loop = true;
+$(function(){
+	$('#thermometer, #thermometer2, #thermometer3').jqxGauge({
+		width : 150, height : 150,
+		min : -20,		max : 50,
+		ranges : [ {
+			startValue : -20, endValue : 0,	style : { fill : '#e2e2e2'}
+		}, {
+			startValue : 0, endValue : 10,
+			style : {fill : '#00ccff'},
+		}, {
+			startValue : 10, endValue : 25,
+			style : { fill : '#4cb848'},
+		}, {
+			startValue : 25,endValue : 35,
+			style : {fill : '#fad00b'},
+		}, {
+			startValue : 35,endValue : 50,
+			style : {fill : '#e53d37'},
+		} ],
+		labels : {position : 'outside'},
+		animationDuration : 500,
+		border : {visible : false},
+		caption : { value : '온도 : 0°C'}
+	});
+	$('#hygrometer, #hygrometer2, #hygrometer3').jqxGauge({
+		width : 150, height : 150, 	min : 0,	max : 100,
+		border : {	visible : false},
+		caption : {	value : '습도 : 68%'},
+		value : 68
+	});
+	
+	$('[type="checkbox"]').bootstrapSwitch();
+	
+	
+	var ws = io.connect();
+	ws.on('monitor', function(data) {
+		console.log(data);
+		for ( var k in data) {
+			switch(k){
+			case 'L1': $('#chkL1').bootstrapSwitch('state', data.L1, true);
+						break;
+			case "L2": $('#chkL2').bootstrapSwitch('state', data.L2, true);
+						break;
+			case "L3": $('#chkL3').bootstrapSwitch('state', data.L3, true);
+						break;
+			case "AC": $('#chkAc').bootstrapSwitch('state', data.AC, true);
+						break;
+			case "HT": $('#chkHT').bootstrapSwitch('state', data.HT, true);
+						break;
+			case "TM": $('#thermometer').jqxGauge('caption', {'value' : '온도 :' + data.TM + '°C'});
+					   $('#thermometer').val(data.TM);
+			}
+		}
+	});
+	ws.on('alarm', function(data) {
+		console.log("alaram : " + data);
+		siren.play();
+		$('#modal_title').text('외부 침입!!!');
+		$('#modal_msg').text(data.msg);
+		$('#modal').modal('show');
+
+		$('#modal').one('hidden.bs.modal', function(e) {
+			$('#normal').trigger('click');
+			siren.pause();
+		})
+
+	});
+	ws.on('close', function() {
+		console.log("close");
+	});
+	$('[name=security]').change(function(evt) {
+		if (this.checked) {
+			sendCmd("MODE", $(this).val());
+		}
+
+	});
+	$('[type="checkbox"]').on('switchChange.bootstrapSwitch',	function(evt) {
+		if (this.checked) {
+			sendCmd($(this).val(), true);
+		} else {
+			sendCmd($(this).val(), false);
+		}
+	});
+	function sendCmd(key, value) {
+		$.ajax({
+			url : '/command.do',
+			data : {
+				key : key,
+				value : value
+			},
+			success : function(data) {
+				console.log(data);
+				if (key == "MODE" && data.status != 0) {
+					$('#normal').trigger('click');
+					$('#modal_title').text('방범모드 설정 실패!');
+					$('#modal_msg').text(
+							'다음의 이유로 방범 모드 설정에 실패 했습니다. [' + data.msg + ']');
+					$('#modal').modal('show');
+				}
+			},
+			error : function() {
+				alert('error');
+			}
+		});
+	}
+});
+
+</script>
+</head>
+<body>
+	<div class="container">
+		<h1>Home Security<small>Arduino-NodeJs Lab</small></h1>
+		<div class="panel panel-default">
+			<div class="panel-heading">방범설정</div>
+			<div class="panel-body">
+				<div class="btn-group" data-toggle="buttons">
+					<label class="btn btn-primary active">
+						방범 해제 
+						<input type="radio"	name="security" id="normal" value="normal" checked="checked">
+					</label> 
+					<label class="btn btn-primary">
+						재택 방범 
+						<input type="radio"	value="sleep" name="security" id="sleep">
+					</label> 
+					<label class="btn btn-primary">
+						외출 방범 
+						<input type="radio"	value="out" name="security" id="out">
+					</label>
+				</div>
+			</div><!--  panel-body -->
+		</div><!--  panel -->
+	</div><!-- container -->
+	
+	
+	<div class="container">
+		<div class="row">
+			<div class="col-md-4 col-lg-4 col-sm-4">
+				<div class="panel panel-default">
+					<div class="panel-heading">거실</div>
+					<div class="panel-body">
+						<div class="row">
+							<div class="col-md-6 col-lg-6 col-sm-12 col-xs-6">
+								<div class="row">
+									<div class="col-md-12"><div id="thermometer"></div></div>
+								</div>
+								<div class="row">
+									<div class="col-md-12"><div id="hygrometer"></div></div>
+								</div>
+							</div>
+							<div class="col-md-6 col-lg-6 col-sm-12 col-xs-6">
+								<div class="form-group">
+									<label for="chkL1" class=" control-label">조명</label>
+									 <input	type="checkbox" id="chkL1" value="L1"/>
+								</div>
+								<div class="form-group">
+									<label for="chkAc" class=" control-label">냉방</label> <input
+										type="checkbox" id="chkAc" value="AC" />
+								</div>
+								<div class="form-group">
+									<label for="chkHT" class=" control-label">난방</label> <input
+										type="checkbox" id="chkHT" value="HT" />
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div><!--  column first -->
+			<div class="col-md-4  col-lg-4 col-sm-4" >
+				<div class="panel panel-default">
+					<div class="panel-heading">침실</div>
+					<div class="panel-body">
+						<div class="row">
+							<div class="col-md-6 col-lg-6 col-sm-12 col-xs-6">
+								<div class="row">
+									<div class="col-md-12"><div id="thermometer2"></div></div>
+								</div>
+								<div class="row">
+									<div class="col-md-12"><div id="hygrometer2"></div>
+									</div>
+								</div>
+							</div>
+							
+							<div class="col-md-6 col-lg-6 col-sm-12 col-xs-6">
+								<div class="form-group">
+										<label for="chkL1" class=" control-label">조명</label> <input
+											type="checkbox" id="chkL2" value="L2" />
+									</div>
+									<div class="form-group">
+										<label for="chkAc" class=" control-label">냉방</label> <input
+											type="checkbox" id="chkAc" value="AC" disabled="disabled" />
+									</div>
+									<div class="form-group">
+										<label for="chkHT" class=" control-label">난방</label> <input
+											type="checkbox" id="chkHT" value="HT" disabled="disabled"/>
+									</div>
+								</div>
+						</div>
+					</div>
+				</div>
+			</div><!--  column second -->
+			<div class="col-md-4 col-lg-4 col-sm-4">
+				<div class="panel panel-default">
+					<div class="panel-heading">서재</div>
+					<div class="panel-body">
+						<div class="row">
+							<div class="col-md-6 col-lg-6 col-sm-12 col-xs-6">
+								<div class="row">
+									<div class="col-md-12"><div id="thermometer3"></div></div>
+								</div>
+								<div class="row">
+									<div class="col-md-12"><div id="hygrometer3"></div>
+									</div>
+								</div>
+								
+							</div>
+							<div class="col-md-6 col-lg-6 col-sm-12 col-xs-6">
+								<div class="form-group">
+									<label for="chkL1" class=" control-label">조명</label> <input
+										type="checkbox" id="chkL3" value="L3" />
+								</div>
+								<div class="form-group">
+									<label for="chkAc" class=" control-label">냉방</label> <input
+										type="checkbox" id="chkAc" value="AC" disabled="disabled"/>
+								</div>
+								<div class="form-group">
+									<label for="chkHT" class=" control-label">난방</label> <input
+										type="checkbox" id="chkHT" value="HT" disabled="disabled"/>
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div><!--  column third -->
+		</div><!-- row -->
+	</div> <!-- container -->
+	
+	
+	<!--  modal -->
+	<div id="modal" class="modal fade" tabindex="-1" role="dialog"
+		aria-labelledby="myModalLabel" aria-hidden="true">
+		<div class="modal-dialog">
+			<div class="modal-content">
+				<div class="modal-header">
+					<button type="button" class="close" data-dismiss="modal">
+						<span aria-hidden="true">&times;</span><span class="sr-only">Close</span>
+					</button>
+					<h4 class="modal-title" id="modal_title"></h4>
+				</div>
+				<div class="modal-body">
+					<span id="modal_msg"></span>
+				</div>
+				<div class="modal-footer">
+					<button type="button" class="btn btn-primary" data-dismiss="modal">Close</button>
+				</div>
+			</div>
+		</div>
+	</div>
+</body>
+</html>
